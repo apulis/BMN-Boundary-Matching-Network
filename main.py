@@ -10,6 +10,7 @@ import numpy as np
 import opts
 from models import BMN
 import pandas as pd
+import mmcv
 from post_processing import BMN_post_processing
 from eval import evaluation_proposal
 
@@ -22,7 +23,7 @@ def train_BMN(data_loader, model, optimizer, epoch, bm_mask):
     epoch_pemclr_loss = 0
     epoch_tem_loss = 0
     epoch_loss = 0
-    for n_iter, (input_data, label_confidence, label_start, label_end) in enumerate(data_loader):
+    for n_iter, (input_data, label_confidence, label_start, label_end) in enumerate(mmcv.track_iter_progress(data_loader)):
         input_data = input_data.cuda()
         label_start = label_start.cuda()
         label_end = label_end.cuda()
@@ -84,17 +85,17 @@ def test_BMN(data_loader, model, epoch, bm_mask):
 
 def BMN_Train(opt):
     model = BMN(opt)
-    model = torch.nn.DataParallel(model, device_ids=[0, 1]).cuda()
+    model = torch.nn.DataParallel(model, device_ids=[0]).cuda()
     optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=opt["training_lr"],
                            weight_decay=opt["weight_decay"])
 
     train_loader = torch.utils.data.DataLoader(VideoDataSet(opt, subset="train"),
                                                batch_size=opt["batch_size"], shuffle=True,
-                                               num_workers=8, pin_memory=True)
+                                               num_workers=1, pin_memory=True)
 
     test_loader = torch.utils.data.DataLoader(VideoDataSet(opt, subset="validation"),
                                               batch_size=opt["batch_size"], shuffle=False,
-                                              num_workers=8, pin_memory=True)
+                                              num_workers=1, pin_memory=True)
 
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=opt["step_size"], gamma=opt["step_gamma"])
     bm_mask = get_mask(opt["temporal_scale"])
@@ -106,14 +107,14 @@ def BMN_Train(opt):
 
 def BMN_inference(opt):
     model = BMN(opt)
-    model = torch.nn.DataParallel(model, device_ids=[0, 1]).cuda()
+    model = torch.nn.DataParallel(model, device_ids=[0]).cuda()
     checkpoint = torch.load(opt["checkpoint_path"] + "/BMN_best.pth.tar")
     model.load_state_dict(checkpoint['state_dict'])
     model.eval()
 
     test_loader = torch.utils.data.DataLoader(VideoDataSet(opt, subset="validation"),
                                               batch_size=1, shuffle=False,
-                                              num_workers=8, pin_memory=True, drop_last=False)
+                                              num_workers=1, pin_memory=True, drop_last=False)
     tscale = opt["temporal_scale"]
     with torch.no_grad():
         for idx, input_data in test_loader:
