@@ -28,7 +28,7 @@ def parse_opt():
     parser.add_argument(
         '--batch_size',
         type=int,
-        default=8)
+        default=16)
     parser.add_argument(
         '--step_size',
         type=int,
@@ -54,7 +54,7 @@ def parse_opt():
     parser.add_argument(
         '--feature_path',
         type=str,
-        default="D:\\BaiduNetdiskDownload\\bmn-data\\")
+        default="./data/activitynet_feature_cuhk/")
 
     parser.add_argument(
         '--num_sample',

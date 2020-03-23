@@ -27,7 +27,7 @@ def getDatasetDict(opt):
         video_new_info["feature_frame"] = video_info['feature_frame']
         video_subset = df.subset.values[i]
         video_new_info['annotations'] = video_info['annotations']
-        if video_subset == 'validation':
+        if video_subset == opt['mode']:
             video_dict[video_name] = video_new_info
     return video_dict
 
@@ -106,6 +106,8 @@ def BMN_post_processing(opt):
     result_dict = mp.Manager().dict()
 
     num_videos = len(video_list)
+    print('post-processing num_videos: {}'.format(num_videos))
+
     num_videos_per_thread = num_videos // opt["post_process_thread"]
     processes = []
     for tid in range(opt["post_process_thread"] - 1):

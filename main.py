@@ -54,7 +54,7 @@ def test_BMN(data_loader, model, epoch, bm_mask):
     epoch_pemclr_loss = 0
     epoch_tem_loss = 0
     epoch_loss = 0
-    for n_iter, (input_data, label_confidence, label_start, label_end) in enumerate(data_loader):
+    for n_iter, (input_data, label_confidence, label_start, label_end) in enumerate(mmcv.track_iter_progress(data_loader)):
         input_data = input_data.cuda()
         label_start = label_start.cuda()
         label_end = label_end.cuda()
@@ -85,17 +85,17 @@ def test_BMN(data_loader, model, epoch, bm_mask):
 
 def BMN_Train(opt):
     model = BMN(opt)
-    model = torch.nn.DataParallel(model, device_ids=[0]).cuda()
+    model = torch.nn.DataParallel(model).cuda()
     optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=opt["training_lr"],
                            weight_decay=opt["weight_decay"])
 
     train_loader = torch.utils.data.DataLoader(VideoDataSet(opt, subset="train"),
                                                batch_size=opt["batch_size"], shuffle=True,
-                                               num_workers=1, pin_memory=True)
+                                               num_workers=2, pin_memory=True)
 
     test_loader = torch.utils.data.DataLoader(VideoDataSet(opt, subset="validation"),
                                               batch_size=opt["batch_size"], shuffle=False,
-                                              num_workers=1, pin_memory=True)
+                                              num_workers=2, pin_memory=True)
 
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=opt["step_size"], gamma=opt["step_gamma"])
     bm_mask = get_mask(opt["temporal_scale"])
@@ -112,12 +112,12 @@ def BMN_inference(opt):
     model.load_state_dict(checkpoint['state_dict'])
     model.eval()
 
-    test_loader = torch.utils.data.DataLoader(VideoDataSet(opt, subset="validation"),
+    test_loader = torch.utils.data.DataLoader(VideoDataSet(opt, subset=opt['mode']),
                                               batch_size=1, shuffle=False,
                                               num_workers=1, pin_memory=True, drop_last=False)
     tscale = opt["temporal_scale"]
     with torch.no_grad():
-        for idx, input_data in test_loader:
+        for idx, input_data in mmcv.track_iter_progress(test_loader):
             video_name = test_loader.dataset.video_list[idx[0]]
             input_data = input_data.cuda()
             confidence_map, start, end = model(input_data)
@@ -177,14 +177,18 @@ def BMN_inference(opt):
 def main(opt):
     if opt["mode"] == "train":
         BMN_Train(opt)
-    elif opt["mode"] == "inference":
+
+    elif opt["mode"] in ["validation", "testing"]:
         if not os.path.exists("output/BMN_results"):
             os.makedirs("output/BMN_results")
         BMN_inference(opt)
         print("Post processing start")
         BMN_post_processing(opt)
         print("Post processing finished")
+
+    if opt["mode"] == "validation":
         evaluation_proposal(opt)
+
 
 
 if __name__ == '__main__':
@@ -196,10 +200,4 @@ if __name__ == '__main__':
     json.dump(opt, opt_file)
     opt_file.close()
 
-    # model = BMN(opt)
-    # a = torch.randn(1, 400, 100)
-    # b, c = model(a)
-    # print(b.shape, c.shape)
-    # print(b)
-    # print(c)
     main(opt)
