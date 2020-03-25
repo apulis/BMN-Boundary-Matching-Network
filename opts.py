@@ -7,14 +7,20 @@ def parse_opt():
     parser.add_argument('--mode', type=str, default='train')
     parser.add_argument('--checkpoint_path', type=str, default='./checkpoint')
     parser.add_argument('--auto_resume', action='store_true')
-    parser.add_argument('--training_lr', type=float, default=0.001)
     parser.add_argument('--weight_decay', type=float, default=1e-4)
 
     parser.add_argument('--train_epochs', type=int, default=12)
     parser.add_argument('--batch_size', type=int, default=24)
+
+    # learning rate
+    parser.add_argument('--lr_policy', type=str, default='step', choices=['step', 'cosine'])
+    parser.add_argument('--training_lr', type=float, default=0.001)
+    ## for StepLR
     parser.add_argument('--step_size', type=int, default=7)
     parser.add_argument('--step_gamma', type=float, default=0.1)
-
+    ## for CosineAnnealingLR
+    parser.add_argument('--eta_min', type=float, default=1e-5)
+    
     # Overall Dataset settings
     parser.add_argument('--video_info', type=str, default="./data/activitynet_annotations/video_info_new.csv")
     parser.add_argument('--video_anno', type=str, default="./data/activitynet_annotations/anet_anno_action.json")

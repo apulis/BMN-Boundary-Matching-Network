@@ -46,7 +46,7 @@ def train_BMN(data_loader, model, scheduler, optimizer, epoch, bm_mask):
             epoch_pemclr_loss / (n_iter + 1),
             epoch_pemreg_loss / (n_iter + 1),
             epoch_loss / (n_iter + 1),
-            scheduler.get_last_lr()))
+            scheduler.get_last_lr()[0]))
     writer.add_scalar('TotalLoss/train', epoch_loss / (n_iter + 1), epoch)
 
 
@@ -107,13 +107,19 @@ def BMN_Train(opt):
 
     train_loader = torch.utils.data.DataLoader(VideoDataSet(opt, subset="train"),
                                                batch_size=opt["batch_size"], shuffle=True,
-                                               num_workers=4, pin_memory=True)
+                                               num_workers=2, pin_memory=True)
 
     test_loader = torch.utils.data.DataLoader(VideoDataSet(opt, subset="validation"),
                                               batch_size=opt["batch_size"], shuffle=False,
-                                              num_workers=4, pin_memory=True)
+                                              num_workers=2, pin_memory=True)
 
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=opt["step_size"], gamma=opt["step_gamma"], last_epoch=start_epoch-1)
+    if opt['lr_policy'] == 'step':
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=opt["step_size"], gamma=opt["step_gamma"], last_epoch=start_epoch-1)
+    elif opt['lr_policy'] == 'cosine':
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, opt["train_epochs"], eta_min=opt["eta_min"], last_epoch=start_epoch-1)
+    else:
+        raise NotImplementedError
+
     bm_mask = get_mask(opt["temporal_scale"])
     for epoch in range(start_epoch, opt["train_epochs"]):
         train_BMN(train_loader, model, scheduler, optimizer, epoch, bm_mask)
