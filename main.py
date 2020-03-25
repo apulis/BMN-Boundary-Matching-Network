@@ -45,8 +45,8 @@ def train_BMN(data_loader, model, scheduler, optimizer, epoch, bm_mask):
             epoch, epoch_tem_loss / (n_iter + 1),
             epoch_pemclr_loss / (n_iter + 1),
             epoch_pemreg_loss / (n_iter + 1),
-            epoch_loss / (n_iter + 1)),
-            scheduler.get_last_lr())
+            epoch_loss / (n_iter + 1),
+            scheduler.get_last_lr()))
     writer.add_scalar('TotalLoss/train', epoch_loss / (n_iter + 1), epoch)
 
 
