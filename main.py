@@ -90,7 +90,7 @@ def test_BMN(data_loader, model, epoch, bm_mask):
 def BMN_Train(opt):
     model = BMN(opt)
     model = torch.nn.DataParallel(model).cuda()
-    optimizer = optim.Adam([{'params': filter(lambda p: p.requires_grad, model.parameters()), 'initial_lr': ["training_lr"]}],
+    optimizer = optim.Adam([{'params': filter(lambda p: p.requires_grad, model.parameters()), 'initial_lr': opt["training_lr"]}],
                            lr=opt["training_lr"],
                            weight_decay=opt["weight_decay"])
 
