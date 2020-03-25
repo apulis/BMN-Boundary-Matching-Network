@@ -6,6 +6,7 @@ import json
 import torch
 import torch.nn.parallel
 import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 import opts
 from models import BMN
@@ -15,9 +16,9 @@ from post_processing import BMN_post_processing
 from eval import evaluation_proposal
 
 sys.dont_write_bytecode = True
+writer = SummaryWriter()
 
-
-def train_BMN(data_loader, model, optimizer, epoch, bm_mask):
+def train_BMN(data_loader, model, scheduler, optimizer, epoch, bm_mask):
     model.train()
     epoch_pemreg_loss = 0
     epoch_pemclr_loss = 0
@@ -40,11 +41,13 @@ def train_BMN(data_loader, model, optimizer, epoch, bm_mask):
         epoch_loss += loss[0].cpu().detach().numpy()
 
     print(
-        "BMN training loss(epoch %d): tem_loss: %.03f, pem class_loss: %.03f, pem reg_loss: %.03f, total_loss: %.03f" % (
+        "BMN training loss(epoch %d): tem_loss: %.03f, pem class_loss: %.03f, pem reg_loss: %.03f, total_loss: %.03f, lr: %.05f" % (
             epoch, epoch_tem_loss / (n_iter + 1),
             epoch_pemclr_loss / (n_iter + 1),
             epoch_pemreg_loss / (n_iter + 1),
-            epoch_loss / (n_iter + 1)))
+            epoch_loss / (n_iter + 1)),
+            scheduler.get_last_lr())
+    writer.add_scalar('TotalLoss/train', epoch_loss / (n_iter + 1), epoch)
 
 
 def test_BMN(data_loader, model, epoch, bm_mask):
@@ -54,7 +57,7 @@ def test_BMN(data_loader, model, epoch, bm_mask):
     epoch_pemclr_loss = 0
     epoch_tem_loss = 0
     epoch_loss = 0
-    for n_iter, (input_data, label_confidence, label_start, label_end) in enumerate(mmcv.track_iter_progress(data_loader)):
+    for n_iter, (input_data, label_confidence, label_start, label_end) in enumerate(data_loader):
         input_data = input_data.cuda()
         label_start = label_start.cuda()
         label_end = label_end.cuda()
@@ -74,6 +77,7 @@ def test_BMN(data_loader, model, epoch, bm_mask):
             epoch_pemclr_loss / (n_iter + 1),
             epoch_pemreg_loss / (n_iter + 1),
             epoch_loss / (n_iter + 1)))
+    writer.add_scalar('TotalLoss/test', epoch_loss / (n_iter + 1), epoch)
 
     state = {'epoch': epoch + 1,
              'state_dict': model.state_dict()}
@@ -86,21 +90,33 @@ def test_BMN(data_loader, model, epoch, bm_mask):
 def BMN_Train(opt):
     model = BMN(opt)
     model = torch.nn.DataParallel(model).cuda()
-    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=opt["training_lr"],
+    optimizer = optim.Adam([{'params': filter(lambda p: p.requires_grad, model.parameters()), 'initial_lr': ["training_lr"]}],
+                           lr=opt["training_lr"],
                            weight_decay=opt["weight_decay"])
+
+    if opt['auto_resume']:
+        # Load the checkpoint on CPU to avoid GPU mem spike.
+        checkpoint = torch.load(opt["checkpoint_path"] + "/BMN_checkpoint.pth.tar", map_location="cpu")
+        model.load_state_dict(checkpoint["state_dict"])
+
+        start_epoch = checkpoint["epoch"]
+    else:
+        start_epoch = 0
+
+    print('auto_resume:{}, start_epoch:{}'.format(opt['auto_resume'], start_epoch))
 
     train_loader = torch.utils.data.DataLoader(VideoDataSet(opt, subset="train"),
                                                batch_size=opt["batch_size"], shuffle=True,
-                                               num_workers=2, pin_memory=True)
+                                               num_workers=4, pin_memory=True)
 
     test_loader = torch.utils.data.DataLoader(VideoDataSet(opt, subset="validation"),
                                               batch_size=opt["batch_size"], shuffle=False,
-                                              num_workers=2, pin_memory=True)
+                                              num_workers=4, pin_memory=True)
 
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=opt["step_size"], gamma=opt["step_gamma"])
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=opt["step_size"], gamma=opt["step_gamma"], last_epoch=start_epoch-1)
     bm_mask = get_mask(opt["temporal_scale"])
-    for epoch in range(opt["train_epochs"]):
-        train_BMN(train_loader, model, optimizer, epoch, bm_mask)
+    for epoch in range(start_epoch, opt["train_epochs"]):
+        train_BMN(train_loader, model, scheduler, optimizer, epoch, bm_mask)
         test_BMN(test_loader, model, epoch, bm_mask)
         scheduler.step()
 
@@ -188,6 +204,8 @@ def main(opt):
 
     if opt["mode"] == "validation":
         evaluation_proposal(opt)
+
+    writer.close()
 
 
 
